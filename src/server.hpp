@@ -2,7 +2,7 @@
  * @Author: jun1015 xx.19993.7@qq.com
  * @Date: 2022-05-16 11:31:56
  * @LastEditors: jun1015 xx.19993.7@qq.com
- * @LastEditTime: 2022-06-06 16:51:58
+ * @LastEditTime: 2022-06-06 16:55:09
  * @FilePath: /ljy/FastPIR/src/server.hpp
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -49,7 +49,7 @@ private:
     std::vector<uint64_t> encode(std::vector<unsigned char> str);
     seal::Ciphertext get_sum(std::vector<seal::Ciphertext> &query, seal::GaloisKeys &gal_keys, uint32_t start, uint32_t end);
     uint32_t get_next_power_of_two(uint32_t number);
-    uint32_t get_number_of_bits(uint64_t number);
+    uint32_t get_number_of_bits(uint64_t number); 
 };
 
 #endif
