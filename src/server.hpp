@@ -1,3 +1,11 @@
+/*
+ * @Author: jun1015 xx.19993.7@qq.com
+ * @Date: 2022-05-16 11:31:56
+ * @LastEditors: jun1015 xx.19993.7@qq.com
+ * @LastEditTime: 2022-06-06 16:51:58
+ * @FilePath: /ljy/FastPIR/src/server.hpp
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 #ifndef FASTPIR_SERVER_H
 #define FASTPIR_SERVER_H
 
@@ -34,7 +42,7 @@ private:
     uint32_t N;
     uint32_t plain_bit_count;
     uint32_t db_rows;
-    bool db_preprocessed;
+    bool db_preprocessed; 
 
     void encode_db(std::vector<std::vector<uint64_t>> db);
     void preprocess_query(std::vector<seal::Ciphertext> &query);
