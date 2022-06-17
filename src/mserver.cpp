@@ -93,7 +93,7 @@ PIRReply Mserver::get_response(uint32_t client_id, PIRQuery query)
 
     seal::GaloisKeys gal_keys = client_galois_keys[client_id];
     PIRReply response(reply_ciphertext_num);
-
+    
     for(size_t i = 0; i < reply_ciphertext_num; ++i)
     {
         assert(i != reply_ciphertext_num - 1 || (i+1)*(N/2) >= num_columns_per_obj/2);
@@ -103,8 +103,115 @@ PIRReply Mserver::get_response(uint32_t client_id, PIRQuery query)
     return response;
 }
 
+PIRReply Mserver::get_multi_response(uint32_t client_id, const Query& query)
+{
+    PIRQuery tempQuery = query.query;
+    if(query.coeffOffset.empty())
+    {
+        return get_response(client_id, tempQuery);
+    }
+    else
+    {
+        std::vector<PIRReply> replys;
+        replys.push_back(get_response(client_id, tempQuery));
+        for(int i = 0; i < query.coeffOffset.size(); ++i)
+        {
+            move_query(tempQuery, query.indexOffset[i], query.coeffOffset[i], client_galois_keys[client_id]);
+            replys.push_back(get_response(client_id, tempQuery));
+            tempQuery = query.query;
+        }
+        return concat_response(client_id, replys, query.coeffOffset);
+    }
+}
+
+PIRReply Mserver::concat_response(uint32_t client_id, const std::vector<PIRReply>& replys, const std::vector<int>& coeffOffsets)
+{
+    PIRReply reply;
+    if(reply_ciphertext_num == 1 && num_columns_per_obj <= N / 2)
+    {
+        int moveCount = get_next_power_of_two(num_columns_per_obj / 2);         //旋转step必须是2的幂(可以旋转多次，但这样增加时间消耗)
+        int msgCountPerCipher = N / 2 / moveCount;
+        for(int i = 0; i < std::ceil((double)replys.size() / msgCountPerCipher); ++i)       //需要的总密文数量
+        {
+            seal::Ciphertext temp = replys[i * msgCountPerCipher][0];
+            for(int j = 1; j < msgCountPerCipher && i * msgCountPerCipher + j < replys.size(); ++j)
+            {
+                seal::Ciphertext mvCiphertext = replys[i * msgCountPerCipher + j][0];
+                //每个密文必须要先旋转，因为第一个消息的位置不是固定的
+                rotateCipher(mvCiphertext, -coeffOffsets[i * msgCountPerCipher + j - 1], client_galois_keys[client_id]);    //可能有问题
+           
+                evaluator->rotate_rows_inplace(mvCiphertext, -moveCount * j, client_galois_keys[client_id]);
+                
+                evaluator->add_inplace(temp, mvCiphertext);
+            }
+            reply.push_back(temp);
+        }
+    }
+    
+    //todo：目前其它情况没有作任何处理，直接把每一个response全部返回了
+    else
+    {
+        for(auto& i : replys)
+        {
+            for(auto& j : i)
+            {
+                reply.push_back(j);
+            }
+        }
+    }
+
+    return reply;
+}
+
+void Mserver::move_query(PIRQuery& query, int indexOffset, int coeffOffset, const seal::GaloisKeys& gal_key)
+{
+    assert(indexOffset < (int)num_query_ciphertext);
+    assert(coeffOffset < POLY_MODULUS_DEGREE / 2);
+    //coeffmove
+    for(auto& i : query)
+    {
+        //每个查询向量都有一次旋转，即带来O(n)的时间复杂度
+        rotateCipher(i, coeffOffset, gal_key);
+    } 
+    //indexOffset  s = num_query_ciphertext
+    // |c1|c2|c3|c4|c5|c6!c7|c8|c9|c10|c11|c12|c13|c14|
+    // |  s-indexOffset  |    indexOffset             |
+    //                       |
+    //                       |
+    //                       v
+    // |c7|c8|c9|c10|c11|c12|c13|c14!c1|c2|c3|c4|c5|c6|
+    if(indexOffset == 0)
+    {
+        return;
+    }
+    if(indexOffset < 0)
+    {
+        std::rotate(query.begin(), query.begin() + (-indexOffset), query.end());
+    }
+    else
+    {
+        std::rotate(query.begin(), query.begin() + num_query_ciphertext - indexOffset, query.end());
+    }
+    /*
+    if(indexOffset < 0)
+    {
+        std::vector<seal::Ciphertext> tempBuffer(query.begin(), query.begin() + (-indexOffset));
+        memmove(query.data(), query.data() + (-indexOffset), num_query_ciphertext - (-indexOffset));
+        memmove(query.data() + (num_query_ciphertext - (-indexOffset)), tempBuffer.data(), tempBuffer.size());
+    }
+    else
+    {
+        std::vector<seal::Ciphertext> tempBuffer(query.begin() + (num_query_ciphertext - indexOffset), query.end());
+        memmove(query.data() + indexOffset, query.data(), num_query_ciphertext - indexOffset);
+        memmove(query.data(), tempBuffer.data(), tempBuffer.size());
+    }
+    */
+}
+
 seal::Ciphertext Mserver::get_sum(std::vector<seal::Ciphertext> &query, seal::GaloisKeys &gal_keys, uint32_t start, uint32_t end)
 {
+    static int num = 0;
+
     seal::Ciphertext result;                    //把所有的行(我们把所有的查询向量当作一行，放一个完整的数据的组当成一列)
 
     if (start != end)
@@ -117,6 +224,7 @@ seal::Ciphertext Mserver::get_sum(std::vector<seal::Ciphertext> &query, seal::Ga
         evaluator->rotate_rows_inplace(right_sum, -mid, gal_keys);          //旋转、相加(旋转算法)
         evaluator->add_inplace(left_sum, right_sum);
         return left_sum;
+       
     }
     else
     {           //递归结束，只在行明文中查
@@ -135,6 +243,16 @@ seal::Ciphertext Mserver::get_sum(std::vector<seal::Ciphertext> &query, seal::Ga
     }
 }
 
+void Mserver::rotateCipher(seal::Ciphertext& ctxt, int step, const seal::GaloisKeys& gal_key)
+{
+    while(step != 0)
+    {
+        int realStep = get_real_coeff_step(step);
+        step -= realStep;
+        evaluator->rotate_rows_inplace(ctxt, realStep, gal_key);
+    }
+}
+
 uint32_t Mserver::get_next_power_of_two(uint32_t number)
 {
     if (!(number & (number - 1)))
@@ -144,6 +262,33 @@ uint32_t Mserver::get_next_power_of_two(uint32_t number)
 
     uint32_t number_of_bits = get_number_of_bits(number);
     return (1 << number_of_bits);
+}
+
+uint32_t Mserver::get_last_power_of_two(uint32_t number)
+{
+    uint32_t next = get_next_power_of_two(number);
+    if(next == number)
+    {
+        return number;
+    }
+    else
+    {
+        return next / 2;
+    }
+}
+
+int Mserver::get_real_coeff_step(int step)
+{
+    int stepCount = abs(step);
+    int last = get_last_power_of_two(stepCount);
+    int next = get_next_power_of_two(stepCount);
+
+    int realCount = abs(stepCount - last) < abs(stepCount - next) ? last : next;
+    if(next >= N / 2)
+    {
+        realCount = last;
+    }
+    return step > 0 ? realCount : -realCount;
 }
 
 void Mserver::preprocess_query(std::vector<seal::Ciphertext> &query)
@@ -184,7 +329,7 @@ std::vector<uint64_t> Mserver::encode(std::vector<unsigned char> str){       //�
         }
     }   
     for (int i=0; i<bit_str.length(); i+=plain_data_bits)
-        res.push_back((uint64_t)std::stoi(bit_str.substr(i,plain_data_bits), nullptr, 2));          //将str按uint64t放到结果中，每次取plain_data_bits位
+        res.push_back((uint64_t)std::stoll(bit_str.substr(i,plain_data_bits), nullptr, 2));          //将str按uint64t放到结果中，每次取plain_data_bits位
     //这样将数据分成两份，放到vector<uint64>中，就可以直接放到明文系数中了
     return res;
 }

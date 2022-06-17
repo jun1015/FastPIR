@@ -18,7 +18,7 @@ Client::Client(FastPIRParams params)
     batch_encoder = new seal::BatchEncoder(*context);
 
     std::vector<int> steps;
-    for (int i = 1; i < (num_columns_per_obj / 2); i *= 2)
+    for (int i = 1; i < (num_columns_per_obj / 2); i *= 2)          //最后还是要旋转成单个密文！ 所以说还是有限制，这里可否改进？  
     {
         steps.push_back(-i);
     }
@@ -27,26 +27,26 @@ Client::Client(FastPIRParams params)
     return;
 }
 
-PIRQuery Client::gen_query(uint32_t index)
+PIRQuery Client::gen_query(uint32_t index)              //根据index生成查询
 {
-    std::vector<seal::Ciphertext> query(num_query_ciphertext);
+    std::vector<seal::Ciphertext> query(num_query_ciphertext);          //查询的总数：即数据库每行的明文个数
     seal::Plaintext pt;
     size_t slot_count = batch_encoder->slot_count();
-    size_t row_size = slot_count / 2;
+    size_t row_size = slot_count / 2;                                   //分成两部分
 
     for (int i = 0; i < num_query_ciphertext; i++)
     {
         std::vector<uint64_t> pod_matrix(slot_count, 0ULL);
-        if ((index / row_size) == i)
+        if ((index / row_size) == i)                        //一个查询中只有一半的slot计索引
         {
-            pod_matrix[index % row_size] = 1;
+            pod_matrix[index % row_size] = 1;                   //两部分设为1
             pod_matrix[row_size + (index % row_size)] = 1;
         }
-        batch_encoder->encode(pod_matrix, pt);
+        batch_encoder->encode(pod_matrix, pt);                  //编码、加密
         encryptor->encrypt_symmetric(pt, query[i]);
     }
 
-    return query;
+    return query;   
 }
 
 std::vector<unsigned char> Client::decode_response(PIRResponse response, uint32_t index)

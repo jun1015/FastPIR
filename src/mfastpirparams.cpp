@@ -1,20 +1,20 @@
-/*
- * @Author: 贾根龙 
- * @Date: 2022-05-16 11:31:56
- * @LastEditors: 贾根龙 
- * @LastEditTime: 2022-05-25 09:32:53
- * @FilePath: /ljy/FastPIR/src/fastpirparams.cpp
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
-#include "fastpirparams.hpp"
 
-FastPIRParams::FastPIRParams(size_t num_obj, size_t obj_size)
+#include "mfastpirparams.hpp"
+FastPIRParams::FastPIRParams(size_t num_obj, size_t obj_size, size_t polyDegree, size_t pmod)
 {
     seal_params = seal::EncryptionParameters(seal::scheme_type::bfv);
-    seal_params.set_poly_modulus_degree(POLY_MODULUS_DEGREE);               //多项式模写死为4096
-    seal_params.set_coeff_modulus(COEFF_MOD_ARR);                           //系数模和明文模都固定：60+49bit = 109bit\ 20bit 
-    seal_params.set_plain_modulus(PLAIN_MODULUS);                           //Batching 满足p mod 2N = 1
-
+    
+    seal_params.set_poly_modulus_degree(POLY_MODULUS_DEGREE);                 
+    seal_params.set_coeff_modulus(COEFF_MOD_ARR);
+    seal_params.set_plain_modulus(seal::PlainModulus::Batching(POLY_MODULUS_DEGREE, PLAIN_BIT + 1));
+    
+    //4096
+    /*
+    seal_params.set_poly_modulus_degree(POLY_MODULUS_DEGREE);               
+    //seal_params.set_coeff_modulus(COEFF_MOD_ARR);  
+    seal_params.set_coeff_modulus(seal::CoeffModulus::Create(POLY_MODULUS_DEGREE, { 60, 49 }));
+    seal_params.set_plain_modulus(seal::PlainModulus::Batching(POLY_MODULUS_DEGREE, PLAIN_BIT + 1));
+    */
     this->num_obj = num_obj;
     this->obj_size = obj_size;
 

@@ -1,11 +1,5 @@
-/*
- * @Author: 贾根龙 
- * @Date: 2022-05-25 09:18:36
- * @LastEditors: 贾根龙 
- * @LastEditTime: 2022-05-31 09:23:38
- * @FilePath: /ljy/FastPIR/src/mserver.hpp
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
+
+
 #ifndef FASTPIR_SERVER_H
 #define FASTPIR_SERVER_H
 
@@ -17,7 +11,7 @@
 #include <bitset>
 #include<cassert>
 #include "seal/seal.h"
-#include "fastpirparams.hpp"
+#include "mfastpirparams.hpp"
 
 class Mserver
 {
@@ -30,6 +24,11 @@ public:
     void preprocess_db();
     PIRReply get_response(uint32_t client_id, PIRQuery query);
 
+    PIRReply get_multi_response(uint32_t client_id, const Query& query);
+
+    PIRReply concat_response(uint32_t client_id, const std::vector<PIRReply>& replys, const std::vector<int>& coeffOffsets);
+
+    void move_query(PIRQuery& query, int indexOffset, int coeffOffset, const seal::GaloisKeys& gal_key);
 private:
     seal::SEALContext *context;
     seal::Evaluator *evaluator;
@@ -52,6 +51,10 @@ private:
     seal::Ciphertext get_sum(std::vector<seal::Ciphertext> &query, seal::GaloisKeys &gal_keys, uint32_t start, uint32_t end);
     uint32_t get_next_power_of_two(uint32_t number);
     uint32_t get_number_of_bits(uint64_t number);
+    uint32_t get_last_power_of_two(uint32_t number);
+    void rotateCipher(seal::Ciphertext&, int step, const seal::GaloisKeys& gal_key);
+public:
+    int get_real_coeff_step(int step);
 };
 
 #endif

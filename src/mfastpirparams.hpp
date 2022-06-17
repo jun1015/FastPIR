@@ -10,10 +10,16 @@ typedef  std::vector<seal::Ciphertext> PIRReply;
 typedef  std::vector<seal::Ciphertext> PIRQuery;
 typedef  seal::Ciphertext PIRResponse;
 
+struct Query
+{
+    PIRQuery query;
+    std::vector<int> indexOffset;
+    std::vector<int> coeffOffset;
+};
 
 class FastPIRParams {
 public:
-    FastPIRParams(size_t num_obj, size_t obj_size);
+    FastPIRParams(size_t num_obj, size_t obj_size, size_t polyDegree, size_t pmod);
     size_t get_num_obj();
     size_t get_obj_size();
     uint32_t get_num_query_ciphertext();
