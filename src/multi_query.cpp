@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     std::ofstream file;
     file.open("/tmp/null", std::ios::app);
     //assert(file);
-    const char *optstring = "n:s:N:p:";
+    const char *optstring = "n:s:N:p:t:";
     while ((option = getopt(argc, argv, optstring)) != -1)
     {
         switch (option)
@@ -38,6 +38,9 @@ int main(int argc, char *argv[])
             break;
         case 'p':
             p = std::stoi(optarg);
+            break;
+        case 't':
+            query_count = std::stoi(optarg);
             break;
         case '?':
             print_usage();
@@ -104,7 +107,7 @@ int main(int argc, char *argv[])
     time_end = std::chrono::high_resolution_clock::now();
     auto query_time = (std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start)).count();
     std::cout<<"Generated PIR query!"<<std::endl;
-    std::cout<<"Query size: "<< query.query.size() * (query.coeffOffset.size() + 1) << " Ciphertext, " <<query.query.size() * query.query[0].size() * query.query[0].coeff_modulus_size() * POLY_MODULUS_DEGREE * 8<<" bytes"<<std::endl<<std::endl;
+    std::cout<<"Query size: "<< query.query.size() << " Ciphertext, " <<query.query.size() * query.query[0].size() * query.query[0].coeff_modulus_size() * POLY_MODULUS_DEGREE * 8<<" bytes"<<std::endl<<std::endl;
                                             //！！ 当数量很大的时候查询会变得很大！
     file << "Query size: "<< query.query.size() * (query.coeffOffset.size() + 1) << " Ciphertext, " <<query.query.size() * (query.coeffOffset.size() + 1) * query.query[0].size() * query.query[0].coeff_modulus_size() * POLY_MODULUS_DEGREE * 8<<" bytes"<<std::endl<<std::endl;
     std::cout<<"Generating PIR response..."<<std::endl;

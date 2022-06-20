@@ -125,14 +125,18 @@ std::vector<unsigned char> Mclient::decode_response(std::vector<seal::Ciphertext
     else
     {
         assert(reply_ciphertext_num == 1);                  //多查询目前仅支持用一个密文装下的结果
-        for(int i = 0; i < queryCount; ++i)
+        int msgPerCount =  N / get_next_power_of_two(num_columns_per_obj / 2) / 2;
+        for(int i = 0; i < charRes.size(); ++i)
         {
-            for(int j = 0; j < 2 ;j++)
+            for(int j = 0; j < queryCount && j < msgPerCount; ++j)
             {
-                memcpy(res.data() + offset, charRes[0].data() + j * charRes[0].size() / 2 + i * obj_size / 2, obj_size / 2);
-                offset += obj_size / 2;
-            } 
-            
+                for(int k = 0; k < 2 ;k++)
+                {
+                    memcpy(res.data() + offset, charRes[i].data() + k * charRes[i].size() / 2 + j * obj_size / 2, obj_size / 2);
+                    offset += obj_size / 2;
+                } 
+            }
+            queryCount -= msgPerCount;
         }
     }
 

@@ -134,6 +134,10 @@ PIRReply Mserver::concat_response(uint32_t client_id, const std::vector<PIRReply
         for(int i = 0; i < std::ceil((double)replys.size() / msgCountPerCipher); ++i)       //需要的总密文数量
         {
             seal::Ciphertext temp = replys[i * msgCountPerCipher][0];
+            if(i != 0)
+            {
+                rotateCipher(temp, -coeffOffsets[i * msgCountPerCipher - 1], client_galois_keys[client_id]);
+            }
             for(int j = 1; j < msgCountPerCipher && i * msgCountPerCipher + j < replys.size(); ++j)
             {
                 seal::Ciphertext mvCiphertext = replys[i * msgCountPerCipher + j][0];
