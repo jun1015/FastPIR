@@ -29,6 +29,19 @@ public:
     PIRReply concat_response(uint32_t client_id, const std::vector<PIRReply>& replys, const std::vector<int>& coeffOffsets);
 
     void move_query(PIRQuery& query, int indexOffset, int coeffOffset, const seal::GaloisKeys& gal_key);
+
+    seal::SEALContext getContext() const {return *context;}
+
+    int get_query_ciphertext_count() const {return num_query_ciphertext;}
+
+    uint32_t get_num_obj() const {return num_obj;}
+
+    uint32_t get_obj_size() const {return obj_size;}
+
+    seal::GaloisKeys* get_key(uint32_t id)
+    {
+        return client_galois_keys.find(id) == client_galois_keys.end() ? nullptr : &(client_galois_keys[id]);
+    }
 private:
     seal::SEALContext *context;
     seal::Evaluator *evaluator;
@@ -55,6 +68,8 @@ private:
     void rotateCipher(seal::Ciphertext&, int step, const seal::GaloisKeys& gal_key);
 public:
     int get_real_coeff_step(int step);
+//private:
+//    seal::Decryptor* dec;
 };
 
 #endif

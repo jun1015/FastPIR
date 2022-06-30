@@ -2,7 +2,7 @@
  * @Author: 贾根龙 
  * @Date: 2022-05-25 09:18:19
  * @LastEditors: jun1015 xx.19993.7@qq.com
- * @LastEditTime: 2022-06-15 11:11:24
+ * @LastEditTime: 2022-06-29 10:36:38
  * @FilePath: /ljy/FastPIR/src/mclient.hpp
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -28,6 +28,12 @@ public:
     std::vector<unsigned char> decode_response(std::vector<seal::Ciphertext> response, uint32_t index, size_t queryCount = 1);
     seal::GaloisKeys get_galois_keys();
     //std::vector<unsigned char> decode_multi_response(std::vector<seal::Ciphertext> response, std::vector<uint32_t> index, size_t count);
+    seal::Decryptor* getDec() const {return decryptor;}
+    seal::SEALContext* getContext() const {return context;}
+    uint32_t get_num_obj() const {return num_obj;}
+    uint32_t get_obj_size() const {return obj_size;}
+    uint32_t get_poly_degree() const {return N;}
+    uint32_t get_num_query_ciphertext() const {return num_query_ciphertext;}
 private:
     seal::SEALContext *context;
     seal::KeyGenerator *keygen;
