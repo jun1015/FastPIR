@@ -6,15 +6,16 @@
 #include "codec.h"
 #include "../mclient.hpp"
 #include <iostream>
+#include <chrono>
 using namespace muduo;
 using namespace muduo::net;
 class TcpQueryClient
 {
 public:
-    TcpQueryClient(EventLoop* loop, const InetAddress& address, size_t obj_num, size_t obj_size)
-        :m_tcpclient(loop, address, "query client"), m_codec(std::bind(&TcpQueryClient::onReplyMessage, this, _1))
+    TcpQueryClient(EventLoop* loop, const InetAddress& address, size_t obj_num, size_t obj_size, bool multi)
+        :m_tcpclient(loop, address, "query client"), m_codec(std::bind(&TcpQueryClient::onReplyMessage, this, _1)), m_multiquery(multi)
     {
-        FastPIRParams params(obj_num, obj_size, 8192, 40);
+        FastPIRParams params(obj_num, obj_size);
         m_client.reset(new Mclient(params));
         m_tcpclient.setConnectionCallback(std::bind(&TcpQueryClient::onConnction, this, _1));
         m_tcpclient.setMessageCallback(std::bind(&ReplyCodec::onMessage, m_codec, _1, _2, _3));
@@ -39,8 +40,18 @@ public:
         if(conn->connected())
         {
             m_connection = conn;
+            time_start = std::chrono::high_resolution_clock::now();
             sendKey();
-            query();
+            if(m_multiquery)
+            {
+                LOG_INFO << "multi query start";
+                query();
+            }
+            else 
+            {
+                LOG_INFO << "single query start";
+                part_query();
+            }
         }
         else
             m_connection.reset();
@@ -61,8 +72,19 @@ public:
                 return;
             }
         }
-        auto result = m_client->decode_response(ciphers, m_index[0], m_index.size());
-        checkResult(result);
+        //auto result = m_client->decode_response(ciphers, m_index[0], m_index.size());
+        if(m_multiquery)
+        {
+            auto result = m_client->decode_response(ciphers, m_index[0], m_index.size());
+            checkResult(result);
+        }
+        else
+        {
+            static int num = 0;
+            auto result = m_client->decode_response(ciphers, m_index[num++], 1);
+            partCheckResult(result);
+        }
+        
     }
     void sendKey()
     {
@@ -100,6 +122,29 @@ public:
         m_codec.send(m_connection, indexOffsets, coeffOffsets, strQuery);
     }
 
+    void part_query()
+    {
+        for(int i = 0; i < m_index.size(); ++i)
+        {
+            std::vector<std::string> strQuery;
+            auto query = m_client->gen_query(m_index[i]);
+            for(int j = 0; j < query.query.size(); ++j)
+            {
+                std::stringstream temp;
+                if(query.query[j].save(temp) == -1)
+                {
+                    LOG_INFO << "construct query stream failed, query index = " << m_index[i];
+                    m_connection->forceClose();
+                    return;
+                }
+                strQuery.push_back(temp.str());
+            }
+            assert(m_client->get_num_query_ciphertext() == strQuery.size());
+            m_codec.send(m_connection, query.indexOffset, query.coeffOffset, strQuery);
+            LOG_INFO << "query " << i << " send";
+        }
+    }
+
     void checkResult(const std::vector<unsigned char>& result)
     {
         int obj_size = m_client->get_obj_size();
@@ -109,7 +154,7 @@ public:
             {
                 if(result[i * obj_size + j] != (m_index[i] + j) % 256)
                 {
-                    LOG_INFO << "result error! index = " << i << " offset = " << j << "query index = " << m_index[i];
+                    LOG_INFO << "result error! index = " << i << " offset = " << j << " query index = " << m_index[i];
                     return;
                 }
             }
@@ -118,6 +163,37 @@ public:
         for(auto& i : m_index)
         {
             LOG_INFO << i;
+        }
+        time_end = std::chrono::high_resolution_clock::now();
+        LOG_INFO << "num_obj = " << m_client->get_num_obj() << " obj_size = " << m_client->get_obj_size() << " query count = " << m_index.size()
+                << " query time = " << (std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start)).count();
+    }
+
+    void partCheckResult(const std::vector<unsigned char>& result)
+    {
+        static int num = 0;
+        int obj_size = m_client->get_obj_size();
+        int index = m_index[num];
+        for(int i = 0; i < obj_size; ++i)
+        {
+            if(result[i] != (index + i) % 256)
+            {
+                LOG_INFO << "result error! index = " << num << " offset = " << i << " query index = " << index;
+                num++;
+                return;
+            }
+        }
+        num++;
+        if(num == m_index.size())
+        {
+            LOG_INFO << "result correct! query indexs = ";
+            for(auto& i : m_index)
+            {
+                LOG_INFO << i;
+            }
+            time_end = std::chrono::high_resolution_clock::now();
+            LOG_INFO << "num_obj = " << m_client->get_num_obj() << " obj_size = " << m_client->get_obj_size() << " query count = " << m_index.size()
+                << " query time = " << (std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start)).count();
         }
     }
 
@@ -133,7 +209,9 @@ private:
     ReplyCodec m_codec;
     std::shared_ptr<Mclient> m_client;
     std::vector<int> m_index;
-    
+    std::chrono::_V2::system_clock::time_point time_start;
+    std::chrono::_V2::system_clock::time_point time_end;
+    bool m_multiquery;
 };
 
 void print_usage()
@@ -153,13 +231,14 @@ std::vector<int> generate_query(int query_count, int num_obj)
 
 int main(int argc, char** argv)
 {
-    const char *optstring = "n:s:a:p:t:";
+    const char *optstring = "n:s:a:p:t:m:";
     int option;
     std::string ip;
     int port;
     int query_count;
     int num_obj;
     int obj_size;
+    bool multi = false; 
     while ((option = getopt(argc, argv, optstring)) != -1)
     {
         switch (option)
@@ -179,6 +258,9 @@ int main(int argc, char** argv)
         case 's':
             obj_size = std::stoi(optarg);
             break;
+        case 'm':
+            multi = true;
+            break;
         case '?':
             print_usage();
             return 1;
@@ -187,7 +269,7 @@ int main(int argc, char** argv)
 
     EventLoop loop;
     InetAddress serverAddress(ip, port);
-    TcpQueryClient client(&loop, serverAddress, 1000, 288);
+    TcpQueryClient client(&loop, serverAddress, num_obj, obj_size, multi);
     client.connect();
     std::vector<int> querys = generate_query(query_count, num_obj);
     client.setIndex(querys);
